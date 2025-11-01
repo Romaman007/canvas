@@ -2,7 +2,10 @@ add_executable(cancans
   main.cpp
   canvas_view.cpp
   canvas_view.hpp
-
+  canvas_window.cpp
+  canvas_window.hpp
+  slide_panel.cpp
+  slide_panel.hpp
 )
 
 target_link_libraries(cancans

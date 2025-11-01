@@ -1,29 +1,47 @@
 #include "camera.hpp"
+#include <algorithm>
+
+namespace {
+constexpr double kMaxZoomExp = 45.0;
+constexpr double kMinZoomExp = -55.0;
+constexpr double kRebaseZoomThreshold = 1.0;
+}
 
 Camera::Camera() = default;
 
+Vec2 Camera::worldFromScreen(double sx, double sy) const {
+    const double sc = scale();
+    return Vec2{
+        (sx - offsetPx_.x) / sc + worldCenter_.x,
+        (sy - offsetPx_.y) / sc + worldCenter_.y
+    };
+}
+
+Vec2 Camera::screenFromWorld(double wx, double wy) const {
+    const double sc = scale();
+    return Vec2{
+        (wx - worldCenter_.x) * sc + offsetPx_.x,
+        (wy - worldCenter_.y) * sc + offsetPx_.y
+    };
+}
+
+Vec2 Camera::worldCenter() const {
+    return worldCenter_;
+}
+
 void Camera::zoomAt(double screenX, double screenY, double deltaExp) {
-    // мировая точка под курсором до изменения масштаба
     Vec2 before = worldFromScreen(screenX, screenY);
 
-    // масштабируем экспоненциально (база 2)
-    scale_ *= std::pow(2.0, deltaExp);
+    zoomExp_ = std::clamp(zoomExp_ + deltaExp, kMinZoomExp, kMaxZoomExp);
 
-    // зажим диапазона масштаба и ребейз, чтобы не упираться в double/Qt точность
-    if (scale_ > 1e10) {
-        rebase();
-        scale_ = 1e10;
-    } else if (scale_ < 1e-9) {
-        rebase();
-        scale_ = 1e-9;
-    }
-
-    // мировая точка под курсором после изменения масштаба
     Vec2 after = worldFromScreen(screenX, screenY);
+    const double sc = scale();
+    offsetPx_.x += (after.x - before.x) * sc;
+    offsetPx_.y += (after.y - before.y) * sc;
 
-    // сохраняем положение курсора на экране (двигаем оффсет противоположно сдвигу мира)
-    offsetPx_.x += (after.x - before.x) * scale_;
-    offsetPx_.y += (after.y - before.y) * scale_;
+    if (std::abs(zoomExp_) > kRebaseZoomThreshold) {
+        rebase();
+    }
 }
 
 void Camera::panPx(double dx, double dy) {
@@ -36,21 +54,17 @@ void Camera::setOffsetPx(double x, double y) {
     offsetPx_.y = y;
 }
 
-Vec2 Camera::worldFromScreen(double sx, double sy) const {
-    // (sx - offset) переводим в world, затем добавляем центр мира
-    return Vec2{ (sx - offsetPx_.x) / scale_ + worldCenter_.x,
-                 (sy - offsetPx_.y) / scale_ + worldCenter_.y };
+bool Camera::needsRecenter() const {
+    const double threshold = 1e6;
+    return std::fabs(worldCenter_.x) > threshold || std::fabs(worldCenter_.y) > threshold;
 }
 
-Vec2 Camera::screenFromWorld(double wx, double wy) const {
-    // (w - center) масштабируем в пиксели и добавляем offset
-    return Vec2{ (wx - worldCenter_.x) * scale_ + offsetPx_.x,
-                 (wy - worldCenter_.y) * scale_ + offsetPx_.y };
+void Camera::shiftWorldCenter(const Vec2& delta) {
+    worldCenter_.x -= delta.x;
+    worldCenter_.y -= delta.y;
 }
 
 void Camera::rebase() {
-    // переносим центр мира в текущую world-точку, соответствующую левому-верхнему экрану (0,0),
-    // и обнуляем экранный оффсет — так координаты остаются «маленькими»
     Vec2 centerWorld = worldFromScreen(0.0, 0.0);
     worldCenter_ = centerWorld;
     offsetPx_ = {0.0, 0.0};

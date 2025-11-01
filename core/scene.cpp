@@ -1,10 +1,10 @@
 #include "scene.hpp"
 #include "camera.hpp"
 
-void Scene::beginStroke(double brushPx, const Camera& cam) {
+void Scene::beginStroke(double brushPx, std::uint32_t colorRGB, const Camera& cam) {
     if (drawing_) return;
     strokes_.emplace_back();
-    strokes_.back().begin(brushPx, cam);
+    strokes_.back().begin(brushPx, colorRGB, cam);
     drawing_ = true;
 }
 
@@ -20,4 +20,11 @@ void Scene::endStroke() {
         strokes_.pop_back();
     }
     drawing_ = false;
+}
+
+void Scene::translate(const Vec2& delta) {
+    if (delta.x == 0.0 && delta.y == 0.0) return;
+    for (auto& stroke : strokes_) {
+        stroke.translate(delta);
+    }
 }
